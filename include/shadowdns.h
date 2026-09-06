@@ -172,7 +172,8 @@ int  sd_upstream_query(const sd_config_t *cfg, const char *qname,
                        uint8_t *resp, size_t resp_sz, int *latency_ms);
 
 int  sd_proxy_run(const sd_config_t *cfg);
-int  sd_http_run(const sd_config_t *cfg);
+/* Exported for main readiness check */
+int sd_http_listening(void);
 int  sd_tui_run(const sd_config_t *cfg);
 
 int  sd_ebpf_start(const sd_config_t *cfg);

@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/resource.h>
+#include <time.h>
 
 #ifdef SD_HAS_EBPF
 #include <bpf/libbpf.h>
@@ -85,31 +87,45 @@ static void *rb_thread(void *arg) {
 
 int sd_ebpf_active(void) { return g_active; }
 
+static void bump_memlock(void) {
+    struct rlimit rl = {
+        .rlim_cur = RLIM_INFINITY,
+        .rlim_max = RLIM_INFINITY,
+    };
+    if (setrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
+        /* Best-effort soft raise when infinity is denied */
+        rl.rlim_cur = rl.rlim_max = 512ull * 1024ull * 1024ull;
+        (void)setrlimit(RLIMIT_MEMLOCK, &rl);
+    }
+}
+
 int sd_ebpf_start(const sd_config_t *cfg) {
     if (!cfg->enable_ebpf) return 0;
 #ifdef SD_HAS_EBPF
+    bump_memlock();
     libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
     g_skel = shadow_attr_bpf__open();
     if (!g_skel) {
-        fprintf(stderr, "eBPF: open failed (need CAP_BPF / root?)\n");
+        fprintf(stderr, "eBPF: unavailable (open failed) — continuing with /proc attribution\n");
         return -1;
     }
     if (shadow_attr_bpf__load(g_skel)) {
-        fprintf(stderr, "eBPF: load failed\n");
+        fprintf(stderr,
+                "eBPF: unavailable (need sudo/CAP_BPF) — continuing with /proc attribution\n");
         shadow_attr_bpf__destroy(g_skel);
         g_skel = NULL;
         return -1;
     }
     seed_doh_ips(bpf_map__fd(g_skel->maps.doh_ips));
     if (shadow_attr_bpf__attach(g_skel)) {
-        fprintf(stderr, "eBPF: attach failed\n");
+        fprintf(stderr, "eBPF: attach failed — continuing with /proc attribution\n");
         shadow_attr_bpf__destroy(g_skel);
         g_skel = NULL;
         return -1;
     }
     g_rb = ring_buffer__new(bpf_map__fd(g_skel->maps.bypass_rb), on_bypass, NULL, NULL);
     if (!g_rb) {
-        fprintf(stderr, "eBPF: ringbuf failed\n");
+        fprintf(stderr, "eBPF: ringbuf failed — continuing with /proc attribution\n");
         shadow_attr_bpf__destroy(g_skel);
         g_skel = NULL;
         return -1;
@@ -121,7 +137,7 @@ int sd_ebpf_start(const sd_config_t *cfg) {
     return 0;
 #else
     (void)cfg;
-    fprintf(stderr, "eBPF: built without SD_HAS_EBPF\n");
+    fprintf(stderr, "eBPF: built without SD_HAS_EBPF — /proc attribution only\n");
     return -1;
 #endif
 }

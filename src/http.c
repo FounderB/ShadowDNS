@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 static const sd_config_t *g_cfg;
+static volatile int g_http_listening;
 
 static const char *mime_for(const char *path) {
     const char *dot = strrchr(path, '.');
@@ -319,12 +320,18 @@ int sd_http_run(const sd_config_t *cfg) {
     addr.sin_port = htons((uint16_t)cfg->http_port);
     inet_pton(AF_INET, cfg->bind_host, &addr.sin_addr);
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        perror("bind http"); close(sock); return -1;
+        fprintf(stderr,
+                "bind http %s:%d failed: %s\n"
+                "  Tip: port busy — try --http-port 8089 (8088 may be another app)\n",
+                cfg->bind_host, cfg->http_port, strerror(errno));
+        close(sock);
+        return -1;
     }
     if (listen(sock, 128) < 0) { perror("listen"); close(sock); return -1; }
     fprintf(stderr, "ShadowDNS dashboard http://%s:%d\n",
             strcmp(cfg->bind_host, "0.0.0.0") == 0 ? "127.0.0.1" : cfg->bind_host,
             cfg->http_port);
+    g_http_listening = 1;
     for (;;) {
         int cfd = accept(sock, NULL, NULL);
         if (cfd < 0) { if (errno == EINTR) continue; perror("accept"); continue; }
@@ -336,4 +343,8 @@ int sd_http_run(const sd_config_t *cfg) {
             close(cfd);
         pthread_attr_destroy(&attr);
     }
+}
+
+int sd_http_listening(void) {
+    return g_http_listening;
 }
