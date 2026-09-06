@@ -1,9 +1,21 @@
 # Binaries
 shadowdns
 *.o
-*.a
 *.so
 *.out
+tests/unit_detect
+tests/fuzz_dns
+
+# BPF generated
+bpf/vmlinux.h
+bpf/*.bpf.o
+src/shadow_attr.skel.h
+
+# Vendored build trees (keep install artifacts optional)
+third_party/libbpf-1.5.0/
+third_party/libbpf.tar.gz
+third_party/libbpf-build/
+# keep third_party/libbpf-install/lib64/libbpf.a if present
 
 # Editor / OS
 .DS_Store
@@ -15,4 +27,5 @@ shadowdns
 # Local
 /tmp/
 *.log
+shadowdns.jsonl
 .config.local

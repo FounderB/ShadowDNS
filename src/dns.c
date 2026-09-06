@@ -125,3 +125,57 @@ const char *sd_dns_type_name(uint16_t t) {
         default: return "OTHER";
     }
 }
+
+static int skip_name(const uint8_t *pkt, size_t len, size_t *offset) {
+    char tmp[SD_MAX_NAME];
+    return parse_name(pkt, len, offset, tmp, sizeof(tmp));
+}
+
+int sd_dns_collect_a(const uint8_t *pkt, size_t len, char *out, size_t out_sz,
+                     int *a_count) {
+    out[0] = '\0';
+    if (a_count) *a_count = 0;
+    if (len < 12) return -1;
+    uint16_t qd = (uint16_t)((pkt[4] << 8) | pkt[5]);
+    uint16_t an = (uint16_t)((pkt[6] << 8) | pkt[7]);
+    size_t off = 12;
+    for (uint16_t i = 0; i < qd; i++) {
+        if (skip_name(pkt, len, &off) != 0) return -1;
+        if (off + 4 > len) return -1;
+        off += 4;
+    }
+    int found = 0;
+    size_t o = 0;
+    for (uint16_t i = 0; i < an; i++) {
+        if (skip_name(pkt, len, &off) != 0) break;
+        if (off + 10 > len) break;
+        uint16_t typ = (uint16_t)((pkt[off] << 8) | pkt[off + 1]);
+        uint16_t rdlen = (uint16_t)((pkt[off + 8] << 8) | pkt[off + 9]);
+        off += 10;
+        if (off + rdlen > len) break;
+        if ((typ == 1 && rdlen == 4) || (typ == 28 && rdlen == 16)) {
+            char ip[64];
+            if (typ == 1) {
+                snprintf(ip, sizeof(ip), "%u.%u.%u.%u",
+                         pkt[off], pkt[off + 1], pkt[off + 2], pkt[off + 3]);
+            } else {
+                /* compact IPv6 hex */
+                snprintf(ip, sizeof(ip),
+                         "%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                         pkt[off], pkt[off+1], pkt[off+2], pkt[off+3],
+                         pkt[off+4], pkt[off+5], pkt[off+6], pkt[off+7]);
+            }
+            size_t il = strlen(ip);
+            if (o && o + 1 < out_sz) out[o++] = ',';
+            if (o + il < out_sz) {
+                memcpy(out + o, ip, il);
+                o += il;
+                out[o] = '\0';
+                found++;
+            }
+        }
+        off += rdlen;
+    }
+    if (a_count) *a_count = found;
+    return found;
+}

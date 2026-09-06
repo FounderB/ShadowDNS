@@ -19,14 +19,17 @@
       <img src="/logo.svg" alt="" width="40" height="40" />
       <div>
         <h1>ShadowDNS</h1>
-        <p class="tag">DNS leak &amp; C2 radar · see who phones home</p>
+        <p class="tag">DNS leak &amp; C2 radar · eBPF truth · attack stories</p>
       </div>
     </div>
     <div class="top-actions">
       <span id="live" class="pill live">LIVE</span>
       <span id="mode" class="pill">—</span>
+      <span id="ebpf" class="pill">eBPF —</span>
       <button id="pauseBtn" type="button">Pause</button>
       <button id="clearBtn" type="button" class="ghost">Clear</button>
+      <a class="pill" href="/api/sarif" target="_blank" rel="noopener">SARIF</a>
+      <a class="pill" href="/metrics" target="_blank" rel="noopener">metrics</a>
     </div>
   </header>
 
@@ -35,19 +38,25 @@
     <div class="stat warn"><span class="k">alerts</span><span class="v" data-k="alerts">0</span></div>
     <div class="stat bad"><span class="k">blocked</span><span class="v" data-k="blocked">0</span></div>
     <div class="stat crit"><span class="k">tunnels</span><span class="v" data-k="tunnels">0</span></div>
-    <div class="stat"><span class="k">telemetry</span><span class="v" data-k="telemetry">0</span></div>
-    <div class="stat"><span class="k">unique</span><span class="v" data-k="unique">0</span></div>
+    <div class="stat"><span class="k">bypass</span><span class="v" data-k="doh_bypass">0</span></div>
+    <div class="stat"><span class="k">stories</span><span class="v" data-k="stories">0</span></div>
+  </section>
+
+  <section class="stories" id="storiesBox">
+    <h2>Attack stories</h2>
+    <div id="stories" class="story-list"></div>
   </section>
 
   <section class="controls">
-    <input id="filter" type="search" placeholder="Filter domain, process, tag…" autocomplete="off" />
+    <input id="filter" type="search" placeholder="Filter domain, process, tag, container…" autocomplete="off" />
     <div class="chips" id="sevChips">
       <button type="button" data-sev="all" class="chip on">all</button>
       <button type="button" data-sev="crit" class="chip">crit</button>
       <button type="button" data-sev="high" class="chip">high</button>
-      <button type="button" data-sev="med" class="chip">med</button>
       <button type="button" data-sev="tunnel" class="chip">tunnel</button>
+      <button type="button" data-sev="dga" class="chip">dga</button>
       <button type="button" data-sev="telemetry" class="chip">telemetry</button>
+      <button type="button" data-sev="bypass" class="chip">bypass</button>
       <button type="button" data-sev="block" class="chip">blocked</button>
     </div>
   </section>
@@ -69,14 +78,14 @@
         </thead>
         <tbody id="rows"></tbody>
       </table>
-      <p id="empty" class="empty">Waiting for DNS… point a resolver at this host or dig @127.0.0.1 -p 5353 example.com</p>
+      <p id="empty" class="empty">Waiting for DNS… dig @127.0.0.1 -p 5353 example.com</p>
     </div>
   </main>
 
   <footer>
     <span>ShadowDNS <span id="ver"></span></span>
     <span class="sep">·</span>
-    <span>SSE live feed</span>
+    <span>SSE · policy DSL · DoH/DoT · FluxTap bridge</span>
     <span class="sep">·</span>
     <a href="https://github.com/FounderB/ShadowDNS">github</a>
   </footer>

@@ -165,6 +165,29 @@ button.ghost {
 .stat.bad .v { color: var(--bad); }
 .stat.crit .v { color: var(--crit); }
 
+.stories {
+  padding: 0 1.5rem 0.75rem;
+  animation: rise 0.75s ease both;
+}
+.stories h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.story-list { display: grid; gap: 0.45rem; }
+.story {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  background: rgba(12, 18, 25, 0.75);
+}
+.story .t { font-family: var(--display); font-weight: 700; }
+.story .s { color: var(--muted); margin-top: 0.2rem; font-size: 0.75rem; }
+
 .controls {
   display: flex;
   gap: 0.75rem;

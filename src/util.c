@@ -177,3 +177,45 @@ void sd_proc_lookup_udp(uint16_t local_port, char *proc, size_t proc_sz,
     }
     closedir(procdir);
 }
+
+void sd_proc_fill_cgroup(const char *pid, char *cgroup, size_t cg_sz,
+                         char *container, size_t ct_sz) {
+    cgroup[0] = '\0';
+    container[0] = '\0';
+    if (!pid || !pid[0]) return;
+    char path[96];
+    snprintf(path, sizeof(path), "/proc/%s/cgroup", pid);
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+        char *p = strchr(line, ':');
+        if (!p) continue;
+        p = strchr(p + 1, ':');
+        if (!p) continue;
+        p++;
+        size_t n = strlen(p);
+        while (n && (p[n-1] == '\n' || p[n-1] == '\r')) p[--n] = '\0';
+        snprintf(cgroup, cg_sz, "%s", p);
+        /* docker / containerd / crio hints */
+        const char *keys[] = {"/docker/", "/containerd/", "/crio-", "/kubepods/", NULL};
+        for (int i = 0; keys[i]; i++) {
+            char *h = strstr(p, keys[i]);
+            if (!h) continue;
+            h += strlen(keys[i]);
+            char id[64];
+            size_t j = 0;
+            while (h[j] && h[j] != '/' && h[j] != '.' && j + 1 < sizeof(id)) {
+                id[j] = h[j];
+                j++;
+            }
+            id[j] = '\0';
+            if (j >= 12) {
+                snprintf(container, ct_sz, "%.*s", 12, id);
+                break;
+            }
+        }
+        if (container[0]) break;
+    }
+    fclose(f);
+}

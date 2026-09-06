@@ -3,13 +3,16 @@
   const empty = document.getElementById("empty");
   const live = document.getElementById("live");
   const mode = document.getElementById("mode");
+  const ebpf = document.getElementById("ebpf");
   const ver = document.getElementById("ver");
   const filterEl = document.getElementById("filter");
   const pauseBtn = document.getElementById("pauseBtn");
   const clearBtn = document.getElementById("clearBtn");
+  const storiesEl = document.getElementById("stories");
 
   const state = {
     events: [],
+    stories: [],
     paused: false,
     filter: "",
     chip: "all",
@@ -25,15 +28,30 @@
 
   function matches(ev) {
     const q = state.filter.trim().toLowerCase();
-    if (state.chip === "tunnel" && !(ev.tags || "").includes("tunnel")) return false;
-    if (state.chip === "telemetry" && !(ev.tags || "").includes("telemetry")) return false;
+    const tags = ev.tags || "";
+    if (state.chip === "tunnel" && !tags.includes("tunnel")) return false;
+    if (state.chip === "telemetry" && !tags.includes("telemetry")) return false;
+    if (state.chip === "dga" && !tags.includes("dga")) return false;
+    if (state.chip === "bypass" && !(tags.includes("doh-bypass") || tags.includes("dot-bypass"))) return false;
     if (state.chip === "block" && ev.action !== "block") return false;
     if (["crit", "high", "med"].includes(state.chip) && ev.severity !== state.chip) return false;
     if (!q) return true;
-    const hay = [ev.qname, ev.process, ev.reason, ev.tags, ev.action, ev.severity]
+    const hay = [ev.qname, ev.process, ev.reason, ev.tags, ev.action, ev.severity, ev.container]
       .join(" ")
       .toLowerCase();
     return hay.includes(q);
+  }
+
+  function renderStories() {
+    const list = state.stories.slice(-12).reverse();
+    storiesEl.innerHTML = list.length
+      ? list
+          .map(
+            (s) => `<div class="story"><div class="t">${esc(s.title)} · ${esc(s.severity)}</div>
+            <div class="s">${esc(s.stages || "")} — ${esc(s.summary || "")}</div></div>`
+          )
+          .join("")
+      : `<div class="story"><div class="s">Stories appear when signals chain (telemetry → tunnel → block…)</div></div>`;
   }
 
   function render() {
@@ -47,13 +65,14 @@
         <td><span class="sev ${esc(ev.severity)}">${esc(ev.severity)}</span></td>
         <td class="act ${esc(ev.action)}">${esc(ev.action)}</td>
         <td>${esc(ev.qtype)}</td>
-        <td class="proc">${esc(ev.process || "—")}${ev.pid ? ` <span style="color:var(--muted)">#${esc(ev.pid)}</span>` : ""}</td>
+        <td class="proc">${esc(ev.process || "—")}${ev.pid ? ` <span style="color:var(--muted)">#${esc(ev.pid)}</span>` : ""}${ev.ebpf ? " <span style=\"color:var(--accent)\">ebpf</span>" : ""}${ev.container ? ` <span style="color:var(--warn)">&lt;${esc(ev.container)}&gt;</span>` : ""}</td>
         <td class="qname">${esc(ev.qname)}</td>
         <td class="reason">${esc(ev.reason)}${ev.tags ? ` <span style="color:var(--muted)">[${esc(ev.tags)}]</span>` : ""}</td>
         <td><button class="mini" data-block="${esc(ev.qname)}" type="button">block</button></td>
       </tr>`
       )
       .join("");
+    renderStories();
   }
 
   async function refreshStats() {
@@ -66,6 +85,7 @@
       }
       if (j.version) ver.textContent = "v" + j.version;
       mode.textContent = j.block_mode ? "enforce" : "alert-only";
+      ebpf.textContent = j.ebpf ? "eBPF on" : "eBPF off";
     } catch (_) {}
   }
 
@@ -74,6 +94,14 @@
     state.events.push(ev);
     if (state.events.length > 2000) state.events.splice(0, state.events.length - 2000);
     render();
+  }
+
+  function pushStory(s) {
+    if (state.paused) return;
+    const i = state.stories.findIndex((x) => x.id === s.id);
+    if (i >= 0) state.stories[i] = s;
+    else state.stories.push(s);
+    renderStories();
   }
 
   function connectSSE() {
@@ -86,6 +114,18 @@
       live.classList.add("off");
       live.textContent = "RECONNECT";
     };
+    es.addEventListener("dns", (msg) => {
+      try {
+        pushEvent(JSON.parse(msg.data));
+        refreshStats();
+      } catch (_) {}
+    });
+    es.addEventListener("story", (msg) => {
+      try {
+        pushStory(JSON.parse(msg.data));
+        refreshStats();
+      } catch (_) {}
+    });
     es.onmessage = (msg) => {
       try {
         pushEvent(JSON.parse(msg.data));

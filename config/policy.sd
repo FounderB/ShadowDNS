@@ -1,0 +1,10 @@
+# ShadowDNS policy DSL
+# Keys: process= tag= qname= egress= severity= action=allow|alert|block|deny
+
+tag=tunnel action=block
+tag=doh-bypass action=alert
+tag=dga action=alert
+qname=*.onion action=block
+process=npm action=alert
+process=curl action=alert
+severity=crit action=alert

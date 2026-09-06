@@ -1,0 +1,19 @@
+[Unit]
+Description=ShadowDNS — DNS leak & C2 radar
+Documentation=https://github.com/FounderB/ShadowDNS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shadowdns --dns-port 53 --http-port 8088 --upstream udp:1.1.1.1 --upstream dot:1.1.1.1:853 --jsonl /var/log/shadowdns.jsonl
+Restart=on-failure
+RestartSec=2
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_NET_ADMIN
+NoNewPrivileges=false
+LimitNOFILE=65536
+WorkingDirectory=/usr/local/share/shadowdns
+
+[Install]
+WantedBy=multi-user.target
