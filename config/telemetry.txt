@@ -1,0 +1,18 @@
+# Known telemetry / phone-home domains (alert)
+api.segment.io
+cdn.segment.com
+google-analytics.com
+www.google-analytics.com
+ssl.google-analytics.com
+api2.amplitude.com
+ingest.sentry.io
+o0.ingest.sentry.io
+telemetry.mozilla.org
+stats.grafana.org
+browser-intake.googleapis.com
+app-measurement.com
+crashlytics.com
+api.mixpanel.com
+decide.mixpanel.com
+clarity.ms
+browser.sentry-cdn.com

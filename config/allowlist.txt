@@ -1,0 +1,4 @@
+# Never block these (exact or suffix)
+localhost
+local
+arpa

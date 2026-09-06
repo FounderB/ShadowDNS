@@ -1,0 +1,6 @@
+# ShadowDNS blocklist
+# Exact domain or suffix. Wildcards: *.evil.com
+malware.example
+evil.example
+*.c2.invalid
+dns-tunnel.test

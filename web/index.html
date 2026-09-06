@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ShadowDNS — DNS leak & C2 radar</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="noise"></div>
+
+  <header class="top">
+    <div class="brand">
+      <img src="/logo.svg" alt="" width="40" height="40" />
+      <div>
+        <h1>ShadowDNS</h1>
+        <p class="tag">DNS leak &amp; C2 radar · see who phones home</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="live" class="pill live">LIVE</span>
+      <span id="mode" class="pill">—</span>
+      <button id="pauseBtn" type="button">Pause</button>
+      <button id="clearBtn" type="button" class="ghost">Clear</button>
+    </div>
+  </header>
+
+  <section class="stats" id="stats">
+    <div class="stat"><span class="k">queries</span><span class="v" data-k="queries">0</span></div>
+    <div class="stat warn"><span class="k">alerts</span><span class="v" data-k="alerts">0</span></div>
+    <div class="stat bad"><span class="k">blocked</span><span class="v" data-k="blocked">0</span></div>
+    <div class="stat crit"><span class="k">tunnels</span><span class="v" data-k="tunnels">0</span></div>
+    <div class="stat"><span class="k">telemetry</span><span class="v" data-k="telemetry">0</span></div>
+    <div class="stat"><span class="k">unique</span><span class="v" data-k="unique">0</span></div>
+  </section>
+
+  <section class="controls">
+    <input id="filter" type="search" placeholder="Filter domain, process, tag…" autocomplete="off" />
+    <div class="chips" id="sevChips">
+      <button type="button" data-sev="all" class="chip on">all</button>
+      <button type="button" data-sev="crit" class="chip">crit</button>
+      <button type="button" data-sev="high" class="chip">high</button>
+      <button type="button" data-sev="med" class="chip">med</button>
+      <button type="button" data-sev="tunnel" class="chip">tunnel</button>
+      <button type="button" data-sev="telemetry" class="chip">telemetry</button>
+      <button type="button" data-sev="block" class="chip">blocked</button>
+    </div>
+  </section>
+
+  <main>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>time</th>
+            <th>sev</th>
+            <th>action</th>
+            <th>type</th>
+            <th>process</th>
+            <th>query</th>
+            <th>why</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="empty">Waiting for DNS… point a resolver at this host or dig @127.0.0.1 -p 5353 example.com</p>
+    </div>
+  </main>
+
+  <footer>
+    <span>ShadowDNS <span id="ver"></span></span>
+    <span class="sep">·</span>
+    <span>SSE live feed</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/FounderB/ShadowDNS">github</a>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
