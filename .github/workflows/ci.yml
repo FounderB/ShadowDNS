@@ -17,7 +17,8 @@ jobs:
           sudo apt-get install -y build-essential libssl-dev pkg-config dnsutils curl
 
       - name: Build
-        run: make clean && make
+        # Soft eBPF fallback in Makefile; CI forces userspace for kernel/bpftool variance
+        run: make clean && SD_NO_EBPF=1 make
 
       - name: Unit tests
         run: make unit

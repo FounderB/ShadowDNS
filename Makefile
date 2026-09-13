@@ -54,12 +54,19 @@ $(BPF_SKEL): $(BPF_OBJ)
 
 bpf: $(BPF_SKEL)
 
-# Prefer eBPF build; fall back automatically if skeleton/libbpf unavailable
+# Prefer eBPF build; fall back automatically if skeleton/libbpf/bpftool unavailable
 $(BIN): $(SRC) include/shadowdns.h
-	@if [ -f "$(LIBBPF_A)" ] && $(CLANG) -target bpf -c -x c /dev/null -o /tmp/sd_bpf_probe.o 2>/dev/null; then \
-	  $(MAKE) $(BPF_SKEL) && \
-	  $(CC) $(CFLAGS) -DSD_HAS_EBPF -I$(LIBBPF_DIR)/include -Ibpf -Isrc \
-	    $(SRC) -o $@ $(LDFLAGS) $(LIBBPF_A) -lelf -lz ; \
+	@if [ -n "$${SD_NO_EBPF}" ]; then \
+	  echo "NOTE: SD_NO_EBPF set — building userspace only" ; \
+	  $(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS) ; \
+	elif [ -f "$(LIBBPF_A)" ] && $(CLANG) -target bpf -c -x c /dev/null -o /tmp/sd_bpf_probe.o 2>/dev/null; then \
+	  if $(MAKE) $(BPF_SKEL); then \
+	    $(CC) $(CFLAGS) -DSD_HAS_EBPF -I$(LIBBPF_DIR)/include -Ibpf -Isrc \
+	      $(SRC) -o $@ $(LDFLAGS) $(LIBBPF_A) -lelf -lz ; \
+	  else \
+	    echo "NOTE: eBPF skeleton failed (bpftool/BTF) — building without eBPF" ; \
+	    $(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS) ; \
+	  fi ; \
 	else \
 	  echo "NOTE: building without eBPF (libbpf/clang-bpf missing)" ; \
 	  $(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS) ; \
