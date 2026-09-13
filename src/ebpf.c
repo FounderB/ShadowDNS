@@ -66,12 +66,13 @@ static int on_bypass(void *ctx, void *data, size_t len) {
     snprintf(ev.cgroup, sizeof(ev.cgroup), "cg:%llu",
              (unsigned long long)e->cgroup_id);
     ev.attr_ebpf = 1;
+    if (!ev.id) ev.id = sd_store_alloc_id();
     sd_story_on_event(&ev);
+    sd_store_push(&ev);
     if (sd_runtime_cfg) {
         sd_jsonl_write(sd_runtime_cfg, &ev);
         sd_notify_event(sd_runtime_cfg, &ev);
     }
-    sd_store_push(&ev);
     return 0;
 }
 

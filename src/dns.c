@@ -23,13 +23,17 @@ static int parse_name(const uint8_t *pkt, size_t len, size_t *offset,
         if ((lab & 0xC0) == 0xC0) {
             if (i + 1 >= len) return -1;
             size_t ptr = ((lab & 0x3F) << 8) | pkt[i + 1];
+            if (ptr >= len) return -1;
             if (!end) end = i + 2;
             i = ptr;
             if (++jumps > 16) return -1;
             continue;
         }
+        /* RFC 1035: label length 1..63 (non-compressed) */
+        if (lab > 63) return -1;
         i++;
         if (i + lab > len || out_i + lab + 2 >= out_sz) return -1;
+        if (out_i + lab + (first ? 0 : 1) > 253) return -1; /* max FQDN wire-ish */
         if (!first) out[out_i++] = '.';
         first = 0;
         memcpy(out + out_i, pkt + i, lab);

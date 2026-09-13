@@ -13,7 +13,7 @@ static void *http_thread(void *arg) {
     if (sd_http_run(arg) != 0) {
         atomic_store(&g_http_failed, 1);
         fprintf(stderr, "http server failed — refusing to run DNS-only\n");
-        kill(getpid(), SIGTERM);
+        sd_stop_request();
     }
     return NULL;
 }
@@ -23,10 +23,10 @@ static void *tui_thread(void *arg) {
     return NULL;
 }
 
+/* Async-signal-safe: only set a flag — never pthread_join here */
 static void on_sig(int sig) {
     (void)sig;
-    sd_ebpf_stop();
-    _exit(atomic_load(&g_http_failed) ? 1 : 0);
+    sd_stop_request();
 }
 
 int main(int argc, char **argv) {
@@ -66,14 +66,15 @@ int main(int argc, char **argv) {
     }
 
     for (int i = 0; i < 100; i++) {
-        if (atomic_load(&g_http_failed))
-            return 1;
+        if (atomic_load(&g_http_failed) || sd_stop_requested())
+            break;
         if (sd_http_listening())
             break;
         usleep(20000);
     }
     if (atomic_load(&g_http_failed) || !sd_http_listening()) {
         fprintf(stderr, "http did not become ready on port %d\n", cfg.http_port);
+        sd_ebpf_stop();
         return 1;
     }
 
@@ -83,6 +84,9 @@ int main(int argc, char **argv) {
     }
 
     int rc = sd_proxy_run(&cfg);
+    /* Join eBPF from main — never from the signal handler */
     sd_ebpf_stop();
+    if (atomic_load(&g_http_failed))
+        return 1;
     return rc == 0 ? 0 : 1;
 }

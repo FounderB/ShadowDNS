@@ -17,7 +17,34 @@
     filter: "",
     chip: "all",
     maxRows: 400,
+    token: "",
   };
+
+  const params = new URLSearchParams(location.search);
+  state.token = params.get("token") || localStorage.getItem("sd_token") || "";
+  if (params.get("token")) localStorage.setItem("sd_token", params.get("token"));
+
+  function authHeaders() {
+    return state.token ? { "X-ShadowDNS-Token": state.token } : {};
+  }
+  function withToken(url) {
+    if (!state.token) return url;
+    const u = new URL(url, location.origin);
+    u.searchParams.set("token", state.token);
+    return u.pathname + u.search;
+  }
+
+  async function ensureToken() {
+    try {
+      const r = await fetch("/api/stats", { headers: authHeaders() });
+      if (r.status !== 401) return;
+      const t = prompt("ShadowDNS API token required");
+      if (t) {
+        state.token = t;
+        localStorage.setItem("sd_token", t);
+      }
+    } catch (_) {}
+  }
 
   const esc = (s) =>
     String(s ?? "")
@@ -77,7 +104,11 @@
 
   async function refreshStats() {
     try {
-      const r = await fetch("/api/stats");
+      const r = await fetch("/api/stats", { headers: authHeaders() });
+      if (r.status === 401) {
+        await ensureToken();
+        return;
+      }
       const j = await r.json();
       for (const [k, v] of Object.entries(j)) {
         const el = document.querySelector(`[data-k="${k}"]`);
@@ -105,7 +136,7 @@
   }
 
   function connectSSE() {
-    const es = new EventSource("/api/stream");
+    const es = new EventSource(withToken("/api/stream"));
     es.onopen = () => {
       live.classList.remove("off");
       live.textContent = "LIVE";
@@ -166,7 +197,7 @@
     const domain = btn.getAttribute("data-block");
     await fetch("/api/block", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ domain }),
     });
     btn.textContent = "ok";
@@ -174,6 +205,8 @@
 
   refreshStats();
   setInterval(refreshStats, 3000);
-  connectSSE();
-  render();
+  ensureToken().then(() => {
+    connectSSE();
+    render();
+  });
 })();

@@ -60,7 +60,11 @@ int sd_metrics_render(char *buf, size_t buflen) {
         "# TYPE shadowdns_unique_names gauge\n"
         "shadowdns_unique_names %llu\n"
         "# TYPE shadowdns_ebpf_active gauge\n"
-        "shadowdns_ebpf_active %d\n",
+        "shadowdns_ebpf_active %d\n"
+        "# TYPE shadowdns_auth_fail_total counter\n"
+        "shadowdns_auth_fail_total %llu\n"
+        "# TYPE shadowdns_refused_clients_total counter\n"
+        "shadowdns_refused_clients_total %llu\n",
         (unsigned long long)st.queries,
         (unsigned long long)st.blocked,
         (unsigned long long)st.alerts,
@@ -73,7 +77,9 @@ int sd_metrics_render(char *buf, size_t buflen) {
         (unsigned long long)st.stories,
         (unsigned long long)st.ebpf_hits,
         (unsigned long long)st.unique_names,
-        sd_ebpf_active());
+        sd_ebpf_active(),
+        (unsigned long long)st.auth_fail,
+        (unsigned long long)st.refused_clients);
 }
 
 int sd_sarif_export(char *buf, size_t buflen) {

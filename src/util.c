@@ -9,6 +9,17 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <signal.h>
+
+static volatile sig_atomic_t g_sd_stop;
+
+void sd_stop_request(void) {
+    g_sd_stop = 1;
+}
+
+int sd_stop_requested(void) {
+    return g_sd_stop != 0;
+}
 
 uint64_t sd_now_ms(void) {
     struct timeval tv;
@@ -42,6 +53,33 @@ void sd_json_escape(const char *in, char *out, size_t out_sz) {
         }
     }
     out[j] = '\0';
+}
+
+/* Clamp snprintf return so memcpy/write never over-read the destination */
+size_t sd_snprintf_copy(char *dst, size_t dst_sz, int sn_ret) {
+    if (!dst || dst_sz == 0) return 0;
+    if (sn_ret < 0) {
+        dst[0] = '\0';
+        return 0;
+    }
+    size_t n = (size_t)sn_ret;
+    if (n >= dst_sz) n = dst_sz - 1;
+    dst[n] = '\0';
+    return n;
+}
+
+/* Constant-time-ish compare for API tokens */
+int sd_token_eq(const char *a, const char *b) {
+    if (!a || !b) return 0;
+    size_t la = strlen(a), lb = strlen(b);
+    size_t n = la > lb ? la : lb;
+    unsigned diff = (unsigned)(la ^ lb);
+    for (size_t i = 0; i < n; i++) {
+        unsigned char ca = i < la ? (unsigned char)a[i] : 0;
+        unsigned char cb = i < lb ? (unsigned char)b[i] : 0;
+        diff |= (unsigned)(ca ^ cb);
+    }
+    return diff == 0;
 }
 
 double sd_name_entropy(const char *qname) {

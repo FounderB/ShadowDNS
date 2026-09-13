@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <strings.h>
 #include <time.h>
@@ -19,6 +20,18 @@ static void handle_packet(const sd_config_t *cfg, int sock,
     ev.ts = time(NULL);
     inet_ntop(AF_INET, &peer->sin_addr, ev.client_ip, sizeof(ev.client_ip));
     ev.client_port = ntohs(peer->sin_port);
+
+    if (!sd_config_client_allowed(cfg, ev.client_ip)) {
+        sd_store_bump_counter("refused_clients", 1);
+        uint8_t refuse[512];
+        int rlen = sd_dns_build_nxdomain(buf, (size_t)n, refuse, sizeof(refuse));
+        /* REFUSED rcode=5 */
+        if (rlen > 3) refuse[3] = (uint8_t)((refuse[3] & 0xF0) | 5);
+        if (rlen > 0)
+            sendto(sock, refuse, (size_t)rlen, 0,
+                   (const struct sockaddr *)peer, sizeof(*peer));
+        return;
+    }
 
     if (sd_dns_extract_question(buf, (size_t)n, ev.qname, sizeof(ev.qname),
                                 &ev.qtype, &ev.qclass) != 0)
@@ -77,6 +90,8 @@ static void handle_packet(const sd_config_t *cfg, int sock,
                (const struct sockaddr *)peer, sizeof(*peer));
     }
 
+    /* Assign id before stories so last_event_id / linkage is valid */
+    if (!ev.id) ev.id = sd_store_alloc_id();
     sd_story_on_event(&ev);
     sd_store_push(&ev);
     sd_jsonl_write(cfg, &ev);
@@ -129,17 +144,24 @@ int sd_proxy_run(const sd_config_t *cfg) {
     }
     fprintf(stderr, "\n");
 
+    /* Wake recvfrom periodically so SIGINT/SIGTERM can stop cleanly */
+    struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
     for (;;) {
+        if (sd_stop_requested()) break;
         uint8_t buf[4096];
         struct sockaddr_in peer;
         socklen_t peerlen = sizeof(peer);
         ssize_t n = recvfrom(sock, buf, sizeof(buf), 0,
                              (struct sockaddr *)&peer, &peerlen);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
             perror("recvfrom");
             continue;
         }
         handle_packet(cfg, sock, buf, n, &peer);
     }
+    close(sock);
+    return 0;
 }

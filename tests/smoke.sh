@@ -9,9 +9,11 @@ if [[ ! -x $BIN ]]; then
 fi
 
 PORT_DNS=18553
-PORT_HTTP=18088
+PORT_HTTP=18089
+TOKEN="smoke-test-token-$$"
 rm -f /tmp/shadowdns-smoke.jsonl
-"$BIN" --dns-port "$PORT_DNS" --http-port "$PORT_HTTP" --quiet --no-ebpf \
+"$BIN" --bind 127.0.0.1 --dns-port "$PORT_DNS" --http-port "$PORT_HTTP" --quiet --no-ebpf \
+  --token "$TOKEN" \
   --jsonl /tmp/shadowdns-smoke.jsonl \
   --policy config/policy.sd &
 PID=$!
@@ -25,26 +27,37 @@ for i in $(seq 1 50); do
   sleep 0.1
 done
 
+# health is public
 curl -sf "http://127.0.0.1:${PORT_HTTP}/api/health" | grep -q '"ok":true'
+# stats require token
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT_HTTP}/api/stats")
+[[ "$code" == "401" ]]
+curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/api/stats" | grep -q '"queries"'
+
 dig @127.0.0.1 -p "$PORT_DNS" example.com +time=2 +tries=1 >/dev/null
 dig @127.0.0.1 -p "$PORT_DNS" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tunnel.test" +time=2 +tries=1 >/dev/null || true
 dig @127.0.0.1 -p "$PORT_DNS" api.segment.io +time=2 +tries=1 >/dev/null || true
 dig @127.0.0.1 -p "$PORT_DNS" malware.example +time=2 +tries=1 >/dev/null || true
 
-# FluxTap bridge ingest
-curl -sf -X POST "http://127.0.0.1:${PORT_HTTP}/api/fluxtap" \
-  -H 'content-type: application/json' \
+curl -sf -X POST -H "X-ShadowDNS-Token: $TOKEN" -H 'content-type: application/json' \
+  "http://127.0.0.1:${PORT_HTTP}/api/fluxtap" \
   -d '{"sni":"cdn.other.test","process":"curl","ja3":"deadbeef"}' | grep -q ok
 
-sleep 0.5
-EVENTS="$(curl -sf "http://127.0.0.1:${PORT_HTTP}/api/events")"
+# unauth mutate must fail
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' \
+  "http://127.0.0.1:${PORT_HTTP}/api/block" -d '{"domain":"evil.test"}')
+[[ "$code" == "401" ]]
+
+sleep 0.4
+EVENTS="$(curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/api/events")"
 echo "$EVENTS" | grep -q example.com
 echo "$EVENTS" | grep -q tunnel
-STATS="$(curl -sf "http://127.0.0.1:${PORT_HTTP}/api/stats")"
-echo "$STATS" | grep -q '"queries"'
-curl -sf "http://127.0.0.1:${PORT_HTTP}/metrics" | grep -q shadowdns_queries_total
-curl -sf "http://127.0.0.1:${PORT_HTTP}/api/sarif" | grep -q '"runs"'
-curl -sf "http://127.0.0.1:${PORT_HTTP}/api/stories" >/dev/null
-curl -sf "http://127.0.0.1:${PORT_HTTP}/api/policy" | grep -q policy
+curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/metrics" | grep -q shadowdns_queries_total
+curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/api/sarif" | grep -q '"runs"'
+curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/api/stories" >/dev/null
+curl -sf -H "X-ShadowDNS-Token: $TOKEN" "http://127.0.0.1:${PORT_HTTP}/api/policy" | grep -q policy
 test -s /tmp/shadowdns-smoke.jsonl
+# jsonl should be owner-only
+perm=$(stat -c '%a' /tmp/shadowdns-smoke.jsonl)
+[[ "$perm" == "600" || "$perm" == "0600" ]]
 echo "smoke ok"

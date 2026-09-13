@@ -6,7 +6,7 @@
 #include <time.h>
 #include <netinet/in.h>
 
-#define SD_VERSION "0.2.0"
+#define SD_VERSION "0.2.1"
 #define SD_MAX_NAME 256
 #define SD_MAX_LABEL 64
 #define SD_EVENT_RING 8192
@@ -15,6 +15,11 @@
 #define SD_MAX_RULES 8192
 #define SD_MAX_POLICY 1024
 #define SD_MAX_SPLIT 256
+#define SD_MAX_ALLOW_CIDR 64
+#define SD_MAX_SEEN_NAMES 65536
+#define SD_MAX_HTTP_CONN 128
+#define SD_MAX_STATIC_BYTES (2u * 1024u * 1024u)
+#define SD_SSE_MAX_SEC 300
 
 typedef enum {
     SD_SEV_INFO = 0,
@@ -45,6 +50,11 @@ typedef struct {
 } sd_upstream_t;
 
 typedef struct {
+    uint32_t network; /* host order */
+    uint32_t mask;    /* host order */
+} sd_cidr_t;
+
+typedef struct {
     char qname[SD_MAX_NAME];
     uint16_t qtype;
     uint16_t qclass;
@@ -54,7 +64,7 @@ typedef struct {
     char pid[16];
     char cgroup[160];
     char container[64];
-    int attr_ebpf; /* 1 if eBPF attributed */
+    int attr_ebpf;
     sd_severity_t severity;
     sd_action_t action;
     char reason[160];
@@ -63,7 +73,7 @@ typedef struct {
     int answer_count;
     int rcode;
     int latency_ms;
-    char answers[256]; /* compact A/AAAA summary */
+    char answers[256];
     time_t ts;
     uint64_t id;
     uint64_t story_id;
@@ -98,12 +108,17 @@ typedef struct {
     char webhook_url[512];
     char telegram_token[256];
     char telegram_chat[64];
+    char api_token[128];
+    sd_cidr_t allow_cidrs[SD_MAX_ALLOW_CIDR];
+    int allow_cidr_count;
     int block_mode;
     int resolve_process;
     int enable_ebpf;
     int enable_tui;
     int quiet;
     int fluxtap_bridge;
+    int tls_insecure; /* 1 = skip cert verify (explicit opt-in) */
+    int open_resolver; /* 1 = allow non-local DNS clients without CIDR */
 } sd_config_t;
 
 typedef struct {
@@ -120,18 +135,25 @@ typedef struct {
     uint64_t stories;
     uint64_t ebpf_hits;
     uint64_t newly_seen;
+    uint64_t auth_fail;
+    uint64_t refused_clients;
 } sd_stats_t;
 
 void sd_config_defaults(sd_config_t *cfg);
 int  sd_config_load_args(sd_config_t *cfg, int argc, char **argv);
+int  sd_config_client_allowed(const sd_config_t *cfg, const char *ip);
 
 int  sd_store_init(void);
+uint64_t sd_store_alloc_id(void);
 void sd_store_push(const sd_event_t *ev);
 size_t sd_store_snapshot(sd_event_t *out, size_t max, uint64_t after_id);
 void sd_store_stats(sd_stats_t *out);
 void sd_store_note_name(const char *name);
 int  sd_store_name_age_sec(const char *name, time_t now);
 void sd_store_bump_counter(const char *which, uint64_t n);
+
+void sd_stop_request(void);
+int  sd_stop_requested(void);
 
 int  sd_rules_load(const sd_config_t *cfg);
 int  sd_rules_is_blocked(const char *qname);
@@ -172,8 +194,8 @@ int  sd_upstream_query(const sd_config_t *cfg, const char *qname,
                        uint8_t *resp, size_t resp_sz, int *latency_ms);
 
 int  sd_proxy_run(const sd_config_t *cfg);
-/* Exported for main readiness check */
-int sd_http_listening(void);
+int  sd_http_run(const sd_config_t *cfg);
+int  sd_http_listening(void);
 int  sd_tui_run(const sd_config_t *cfg);
 
 int  sd_ebpf_start(const sd_config_t *cfg);
@@ -206,10 +228,11 @@ int    sd_name_looks_dga(const char *qname, double entropy);
 uint64_t sd_now_ms(void);
 void     sd_iso_time(time_t t, char *buf, size_t n);
 void     sd_json_escape(const char *in, char *out, size_t out_sz);
+size_t   sd_snprintf_copy(char *dst, size_t dst_sz, int sn_ret);
+int      sd_token_eq(const char *a, const char *b);
 const char *sd_sev_name(sd_severity_t s);
 const char *sd_act_name(sd_action_t a);
 
-/* set by main for modules that need runtime cfg */
 extern const sd_config_t *sd_runtime_cfg;
 
 #endif

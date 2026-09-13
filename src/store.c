@@ -40,6 +40,8 @@ void sd_store_bump_counter(const char *which, uint64_t n) {
     else if (!strcmp(which, "stories")) stats.stories += n;
     else if (!strcmp(which, "ebpf_hits")) stats.ebpf_hits += n;
     else if (!strcmp(which, "newly_seen")) stats.newly_seen += n;
+    else if (!strcmp(which, "auth_fail")) stats.auth_fail += n;
+    else if (!strcmp(which, "refused_clients")) stats.refused_clients += n;
     pthread_mutex_unlock(&mu);
 }
 
@@ -53,8 +55,17 @@ void sd_store_note_name(const char *name) {
             return;
         }
     }
+    if (seen_n >= SD_MAX_SEEN_NAMES) {
+        /* drop oldest half (simple bound) */
+        size_t keep = SD_MAX_SEEN_NAMES / 2;
+        for (size_t i = 0; i < seen_n - keep; i++) free(seen[i].name);
+        memmove(seen, seen + (seen_n - keep), keep * sizeof(seen_t));
+        seen_n = keep;
+        stats.unique_names = seen_n;
+    }
     if (seen_n == seen_cap) {
         size_t nc = seen_cap ? seen_cap * 2 : 512;
+        if (nc > SD_MAX_SEEN_NAMES) nc = SD_MAX_SEEN_NAMES;
         seen_t *nn = realloc(seen, nc * sizeof(seen_t));
         if (!nn) { pthread_mutex_unlock(&mu); return; }
         seen = nn;
@@ -81,6 +92,13 @@ int sd_store_name_age_sec(const char *name, time_t now) {
     }
     pthread_mutex_unlock(&mu);
     return -1; /* not seen yet / just noted after */
+}
+
+uint64_t sd_store_alloc_id(void) {
+    pthread_mutex_lock(&mu);
+    uint64_t id = next_id++;
+    pthread_mutex_unlock(&mu);
+    return id;
 }
 
 void sd_store_push(const sd_event_t *ev) {

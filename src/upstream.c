@@ -68,31 +68,58 @@ static int tcp_connect_host(const char *host, int port) {
     return fd;
 }
 
-static SSL_CTX *ssl_ctx(void) {
-    static SSL_CTX *ctx;
+static SSL_CTX *ssl_ctx(int insecure) {
+    static SSL_CTX *ctx_secure;
+    static SSL_CTX *ctx_insecure;
     static int init;
     if (!init) {
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
-        ctx = SSL_CTX_new(TLS_client_method());
-        if (ctx) SSL_CTX_set_default_verify_paths(ctx);
+        ctx_secure = SSL_CTX_new(TLS_client_method());
+        ctx_insecure = SSL_CTX_new(TLS_client_method());
+        if (ctx_secure) {
+            SSL_CTX_set_default_verify_paths(ctx_secure);
+            SSL_CTX_set_verify(ctx_secure, SSL_VERIFY_PEER, NULL);
+            SSL_CTX_set_min_proto_version(ctx_secure, TLS1_2_VERSION);
+        }
+        if (ctx_insecure) {
+            SSL_CTX_set_verify(ctx_insecure, SSL_VERIFY_NONE, NULL);
+            SSL_CTX_set_min_proto_version(ctx_insecure, TLS1_2_VERSION);
+        }
         init = 1;
     }
-    return ctx;
+    return insecure ? ctx_insecure : ctx_secure;
+}
+
+static int ssl_handshake(SSL *ssl, const char *host, int insecure) {
+    SSL_set_tlsext_host_name(ssl, host);
+    if (!insecure) {
+        SSL_set_verify(ssl, SSL_VERIFY_PEER, NULL);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        SSL_set1_host(ssl, host);
+#endif
+    } else {
+        SSL_set_verify(ssl, SSL_VERIFY_NONE, NULL);
+    }
+    if (SSL_connect(ssl) != 1) return -1;
+    if (!insecure) {
+        long vr = SSL_get_verify_result(ssl);
+        if (vr != X509_V_OK) return -1;
+    }
+    return 0;
 }
 
 static int dot_query(const sd_upstream_t *up, const uint8_t *req, size_t req_len,
-                     uint8_t *resp, size_t resp_sz) {
+                     uint8_t *resp, size_t resp_sz, int insecure) {
     if (req_len > 65535) return -1;
     int fd = tcp_connect_host(up->host, up->port ? up->port : 853);
     if (fd < 0) return -1;
-    SSL_CTX *ctx = ssl_ctx();
+    SSL_CTX *ctx = ssl_ctx(insecure);
     if (!ctx) { close(fd); return -1; }
     SSL *ssl = SSL_new(ctx);
-    SSL_set_tlsext_host_name(ssl, up->host);
     SSL_set_fd(ssl, fd);
-    if (SSL_connect(ssl) != 1) {
+    if (ssl_handshake(ssl, up->host, insecure) != 0) {
         SSL_free(ssl);
         close(fd);
         return -1;
@@ -150,17 +177,16 @@ static int b64url(const uint8_t *in, size_t in_len, char *out, size_t out_sz) {
 }
 
 static int doh_query(const sd_upstream_t *up, const uint8_t *req, size_t req_len,
-                     uint8_t *resp, size_t resp_sz) {
+                     uint8_t *resp, size_t resp_sz, int insecure) {
     char b64[1024];
     if (b64url(req, req_len, b64, sizeof(b64)) < 0) return -1;
     int fd = tcp_connect_host(up->host, up->port ? up->port : 443);
     if (fd < 0) return -1;
-    SSL_CTX *ctx = ssl_ctx();
+    SSL_CTX *ctx = ssl_ctx(insecure);
     if (!ctx) { close(fd); return -1; }
     SSL *ssl = SSL_new(ctx);
-    SSL_set_tlsext_host_name(ssl, up->host);
     SSL_set_fd(ssl, fd);
-    if (SSL_connect(ssl) != 1) {
+    if (ssl_handshake(ssl, up->host, insecure) != 0) {
         SSL_free(ssl);
         close(fd);
         return -1;
@@ -172,7 +198,7 @@ static int doh_query(const sd_upstream_t *up, const uint8_t *req, size_t req_len
                      "Accept: application/dns-message\r\n"
                      "Connection: close\r\n\r\n",
                      up->doh_path[0] ? up->doh_path : "/dns-query", b64, up->host);
-    if (SSL_write(ssl, reqhttp, n) != n) {
+    if (n < 0 || (size_t)n >= sizeof(reqhttp) || SSL_write(ssl, reqhttp, n) != n) {
         SSL_free(ssl);
         close(fd);
         return -1;
@@ -189,27 +215,27 @@ static int doh_query(const sd_upstream_t *up, const uint8_t *req, size_t req_len
     SSL_free(ssl);
     close(fd);
 
+    if (!strstr(buf, "200")) return -1;
     char *body = strstr(buf, "\r\n\r\n");
     if (!body) return -1;
     body += 4;
-    /* handle simple chunked or content-length raw body; prefer content-length */
     const char *cl = strcasestr(buf, "Content-Length:");
-    size_t blen = got - (size_t)(body - buf);
+    size_t avail = got - (size_t)(body - buf);
+    size_t blen = avail;
     if (cl) {
         blen = (size_t)strtoul(cl + 15, NULL, 10);
-        if (blen > got - (size_t)(body - buf))
-            blen = got - (size_t)(body - buf);
+        if (blen > avail) return -1; /* truncated / lying CL */
     }
-    if (blen > resp_sz) blen = resp_sz;
+    if (blen > resp_sz || blen < 12) return -1;
     memcpy(resp, body, blen);
-    return blen > 12 ? (int)blen : -1;
+    return (int)blen;
 }
 
 static int query_one(const sd_upstream_t *up, const uint8_t *req, size_t req_len,
-                     uint8_t *resp, size_t resp_sz) {
+                     uint8_t *resp, size_t resp_sz, int insecure) {
     switch (up->kind) {
-        case SD_UP_DOT: return dot_query(up, req, req_len, resp, resp_sz);
-        case SD_UP_DOH: return doh_query(up, req, req_len, resp, resp_sz);
+        case SD_UP_DOT: return dot_query(up, req, req_len, resp, resp_sz, insecure);
+        case SD_UP_DOH: return doh_query(up, req, req_len, resp, resp_sz, insecure);
         case SD_UP_UDP:
         default: return udp_query(up, req, req_len, resp, resp_sz);
     }
@@ -219,14 +245,15 @@ int sd_upstream_query(const sd_config_t *cfg, const char *qname,
                       const uint8_t *req, size_t req_len,
                       uint8_t *resp, size_t resp_sz, int *latency_ms) {
     uint64_t t0 = sd_now_ms();
+    int insecure = cfg ? cfg->tls_insecure : 0;
     sd_upstream_t split;
     if (sd_split_lookup(qname, &split)) {
-        int n = query_one(&split, req, req_len, resp, resp_sz);
+        int n = query_one(&split, req, req_len, resp, resp_sz, insecure);
         *latency_ms = (int)(sd_now_ms() - t0);
         if (n > 0) return n;
     }
     for (int i = 0; i < cfg->upstream_count; i++) {
-        int n = query_one(&cfg->upstreams[i], req, req_len, resp, resp_sz);
+        int n = query_one(&cfg->upstreams[i], req, req_len, resp, resp_sz, insecure);
         if (n > 0) {
             *latency_ms = (int)(sd_now_ms() - t0);
             return n;
