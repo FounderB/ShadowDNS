@@ -13,7 +13,8 @@
   <img alt="eBPF" src="https://img.shields.io/badge/eBPF-CO--RE-5eead4?style=flat-square"/>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-0c1a24?style=flat-square"/>
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-5eead4?style=flat-square"/></a>
-  <img alt="version" src="https://img.shields.io/badge/version-0.2.0-0d1520?style=flat-square&labelColor=5eead4&color=0d1520"/>
+  <img alt="version" src="https://img.shields.io/badge/version-0.2.1-0d1520?style=flat-square&labelColor=5eead4&color=0d1520"/>
+  <img alt="secure" src="https://img.shields.io/badge/defaults-localhost%20%2B%20TLS%20verify-5eead4?style=flat-square"/>
 </p>
 
 <p align="center">
@@ -60,30 +61,29 @@ ShadowDNS shows **who** phoned home, **why it looks bad**, and can **block** it.
 ```bash
 git clone https://github.com/FounderB/ShadowDNS.git
 cd ShadowDNS
-make          # builds with eBPF when libbpf/clang-bpf available
-./shadowdns --dns-port 5353 --http-port 8088
+make
+export SD_API_TOKEN="$(openssl rand -hex 16)"
+./shadowdns --token "$SD_API_TOKEN" --dns-port 5353 --http-port 8089
 ```
 
-Dashboard: **http://127.0.0.1:8088**
+Dashboard: **http://127.0.0.1:8089/?token=$SD_API_TOKEN**
+
+Secure defaults (v0.2.1): bind `127.0.0.1`, TLS verify on DoH/DoT, optional API token, DNS clients loopback-only.
+See [SECURITY.md](SECURITY.md).
 
 ```bash
 dig @127.0.0.1 -p 5353 example.com
 dig @127.0.0.1 -p 5353 api.segment.io
-dig @127.0.0.1 -p 5353 $(python3 -c 'print("a"*48)').tunnel.test
 ```
 
 ### Real resolver modes
 
 ```bash
-# DoT upstream
-./shadowdns --dns-port 5353 --upstream dot:1.1.1.1:853
+# DoT upstream (cert verified)
+./shadowdns --upstream dot:1.1.1.1:853 --token "$SD_API_TOKEN"
 
-# DoH upstream
-./shadowdns --dns-port 5353 --upstream doh:cloudflare-dns.com
-
-# Port 53 (capabilities / root)
-sudo ./shadowdns --dns-port 53 --http-port 8088
-# or: ./scripts/install.sh && systemctl enable --now shadowdns
+# LAN expose (explicit)
+./shadowdns --listen-all --token "$SD_API_TOKEN" --allow-client 192.168.0.0/16
 ```
 
 eBPF needs privileges (`CAP_BPF` / root). Without them, ShadowDNS still runs with `/proc` attribution (`--no-ebpf`).
