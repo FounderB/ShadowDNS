@@ -13,7 +13,7 @@
   <img alt="eBPF" src="https://img.shields.io/badge/eBPF-CO--RE-5eead4?style=flat-square"/>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-0c1a24?style=flat-square"/>
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-5eead4?style=flat-square"/></a>
-  <img alt="version" src="https://img.shields.io/badge/version-0.2.1-0d1520?style=flat-square&labelColor=5eead4&color=0d1520"/>
+  <img alt="version" src="https://img.shields.io/badge/version-0.2.2-0d1520?style=flat-square&labelColor=5eead4&color=0d1520"/>
   <img alt="secure" src="https://img.shields.io/badge/defaults-localhost%20%2B%20TLS%20verify-5eead4?style=flat-square"/>
 </p>
 
@@ -42,7 +42,7 @@ ShadowDNS shows **who** phoned home, **why it looks bad**, and can **block** it.
 
 ---
 
-## Features (v0.2.1)
+## Features (v0.2.2)
 
 - **UDP DNS proxy** with **UDP / DoT / DoH** upstreams + **split horizon**
 - **eBPF process truth** (`udp_sendmsg` map + DoH/DoT bypass ringbuf)

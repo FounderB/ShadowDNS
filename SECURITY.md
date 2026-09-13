@@ -1,6 +1,6 @@
 # Security
 
-ShadowDNS **v0.2.1** ships with secure defaults after a full audit hotfix.
+ShadowDNS **v0.2.2** ships with secure defaults after a full audit hotfix.
 
 ## Defaults
 
@@ -23,9 +23,9 @@ export SD_API_TOKEN="$(openssl rand -hex 16)"
 
 - Prefer `SD_TELEGRAM_TOKEN` + `--telegram-chat` over `--telegram TOKEN:CHAT` (argv leak).
 - JSONL is created mode `0600`.
-- Mutating APIs (`/api/block`, `/api/fluxtap`) and intel APIs require token when set.
+- Mutating APIs (`/api/block`, `/api/fluxtap`) and intel APIs require `X-ShadowDNS-Token` (or `?token=`) when `--token` is set.
 - CORS `*` removed; CSP + security headers enabled.
-- HTTP concurrency capped; SSE auto-closes after 5 minutes.
+- HTTP concurrency capped at 64 threads (`429` when busy); SSE auto-closes after 5 minutes.
 - Webhook SSRF: private/link-local destinations blocked; HTTPS required unless `--insecure-tls`.
 
 ## Fixed in 0.2.1

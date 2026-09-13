@@ -6,7 +6,7 @@
 #include <time.h>
 #include <netinet/in.h>
 
-#define SD_VERSION "0.2.1"
+#define SD_VERSION "0.2.2"
 #define SD_MAX_NAME 256
 #define SD_MAX_LABEL 64
 #define SD_EVENT_RING 8192
@@ -17,7 +17,7 @@
 #define SD_MAX_SPLIT 256
 #define SD_MAX_ALLOW_CIDR 64
 #define SD_MAX_SEEN_NAMES 65536
-#define SD_MAX_HTTP_CONN 128
+#define SD_MAX_HTTP_CONN 64
 #define SD_MAX_STATIC_BYTES (2u * 1024u * 1024u)
 #define SD_SSE_MAX_SEC 300
 

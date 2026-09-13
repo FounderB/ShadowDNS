@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-09-13
+
+### Security / ops
+- Cap concurrent HTTP worker threads at **64** (atomic counter; excess → `429`)
+- Confirm mutating POSTs (`/api/block`, `/api/fluxtap`) require `X-ShadowDNS-Token` / `?token=` when `--token` / `SD_API_TOKEN` is set; without a token, localhost-only bind remains the safe default
+
 ## 0.2.1 — 2026-09-13
 
 Security hardening release — safe to leave running for lab use.
