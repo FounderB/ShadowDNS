@@ -6,14 +6,34 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/shadowdns --dns-port 53 --http-port 8088 --upstream udp:1.1.1.1 --upstream dot:1.1.1.1:853 --jsonl /var/log/shadowdns.jsonl
+WorkingDirectory=/usr/local/share/shadowdns
+EnvironmentFile=-/etc/shadowdns/env
+ExecStart=/usr/local/bin/shadowdns \
+  --bind 127.0.0.1 \
+  --dns-port 5353 \
+  --http-port 8089 \
+  --web-root /usr/local/share/shadowdns/web \
+  --policy /usr/local/share/shadowdns/config/policy.sd \
+  --split /usr/local/share/shadowdns/config/split.conf \
+  --blocklist /usr/local/share/shadowdns/config/blocklist.txt \
+  --telemetry /usr/local/share/shadowdns/config/telemetry.txt \
+  --allowlist /usr/local/share/shadowdns/config/allowlist.txt \
+  --upstream udp:1.1.1.1 \
+  --upstream dot:1.1.1.1:853 \
+  --jsonl /var/log/shadowdns/shadowdns.jsonl
 Restart=on-failure
 RestartSec=2
-AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON CAP_SYS_ADMIN
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_NET_ADMIN
-NoNewPrivileges=false
+# Lab-safe defaults: no CAP_SYS_ADMIN. Add CAP_BPF if you enable eBPF.
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/shadowdns
 LimitNOFILE=65536
-WorkingDirectory=/usr/local/share/shadowdns
+User=shadowdns
+Group=shadowdns
 
 [Install]
 WantedBy=multi-user.target

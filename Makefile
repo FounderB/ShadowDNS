@@ -76,7 +76,7 @@ install: $(BIN)
 	./scripts/install.sh
 
 run: $(BIN)
-	./$(BIN) --dns-port 5353 --http-port 8088
+	./$(BIN) --dns-port 5353 --http-port 8089 --no-ebpf --token labtoken
 
 test: $(BIN)
 	@./tests/smoke.sh
